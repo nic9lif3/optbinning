@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "optbinning-namnh"
+version = "0.1.0"
+description = "PSI-constrained optimal binning extension for optbinning"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+dependencies = [
+    # Ghim chat optbinning: package nay phu thuoc vao API noi bo
+    # (_fit_optimizer, BinningCP/ContinuousBinningCP, chu ky build_model).
+    # Khi nang optbinning len phien ban moi, kiem tra lai + chay test.
+    "optbinning>=0.21,<0.22",
+    "numpy>=1.16.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "scikit-learn>=1.6.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["optbinning_namnh*"]
