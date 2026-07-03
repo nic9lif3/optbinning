@@ -1,4 +1,4 @@
-"""Test cho optbinning_namnh: rang buoc PSI trong optimal binning."""
+"""Tests for optbinning_namnh: PSI constraint in optimal binning."""
 
 import numpy as np
 import pytest
@@ -20,7 +20,7 @@ def _psi(p, q, eps=EPS):
 
 
 def _achieved_psi(splits, x_fit, x_val):
-    """PSI tren cac bin cuoi (dung splits toi uu)."""
+    """PSI over the final bins (using the optimal splits)."""
     splits = np.asarray(splits, dtype=float)
     n_bins = len(splits) + 1
     fi = np.digitize(np.asarray(x_fit, dtype=float), splits, right=False)
@@ -35,7 +35,7 @@ def _make_binary(seed=42, n=6000, shift=0.6):
     x_fit = rng.normal(0.0, 1.0, n)
     prob = 1.0 / (1.0 + np.exp(-x_fit))
     y = (rng.rand(n) < prob).astype(int)
-    # tap valid bi dich chuyen -> PSI cao neu giu nhieu bin nho
+    # validation set is shifted -> high PSI if many small bins are kept
     x_val = rng.normal(shift, 1.3, n)
     return x_fit, y, x_val
 
@@ -63,9 +63,9 @@ def test_binary_none_matches_base():
 def test_binary_pairing_validation():
     x, y, xv = _make_binary()
     with pytest.raises(ValueError):
-        PSIOptimalBinning(psi_threshold=0.1).fit(x, y)          # thieu x_valid
+        PSIOptimalBinning(psi_threshold=0.1).fit(x, y)          # missing x_valid
     with pytest.raises(ValueError):
-        PSIOptimalBinning().fit(x, y, x_valid=xv)               # thieu threshold
+        PSIOptimalBinning().fit(x, y, x_valid=xv)               # missing threshold
 
 
 def test_binary_constraint_respected():
@@ -74,7 +74,7 @@ def test_binary_constraint_respected():
     ob = PSIOptimalBinning(solver="cp", psi_threshold=thr).fit(
         x, y, x_valid=xv)
     achieved = _achieved_psi(ob.splits, x, xv)
-    # dung sai nho do lam tron he so ve int (M=1e6)
+    # small tolerance due to rounding coefficients to int (M=1e6)
     assert achieved <= thr + 1e-3, (achieved, thr)
 
 

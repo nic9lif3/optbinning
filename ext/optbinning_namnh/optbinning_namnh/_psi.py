@@ -1,18 +1,18 @@
 """PSI (Population Stability Index) constraint utilities.
 
-PSI o day dinh nghia bang Jeffrey divergence, dung dung quy uoc cua
+PSI here is defined as the Jeffrey divergence, following the same convention as
 ``optbinning.scorecard.monitoring`` (PSI = jeffrey(p_actual, p_expected)):
 
     PSI = sum_bins (p_fit - p_valid) * ln(p_fit / p_valid)
 
-Moi bin cuoi la mot dai pre-bin lien tiep [j..i], nen dong gop PSI cua no la
-mot hang so tinh truoc duoc. Nho vay tong PSI tren cac bin duoc chon co the
-tuyen tinh hoa CHINH XAC bang dung thu thuat telescoping ma tac gia dung cho
-ham muc tieu trong ``optbinning.binning.cp`` (dong 80-82):
+Each final bin is a contiguous run of pre-bins [j..i], so its PSI contribution
+is a precomputable constant. Therefore the total PSI over the selected bins can
+be linearized EXACTLY using the same telescoping trick the author uses for the
+objective in ``optbinning.binning.cp`` (lines 80-82):
 
     sum_i [ V[i][i]*x[i,i] + sum_{j<i} (V[i][j]-V[i][j+1])*x[i,j] ]
 
-o day thay V bang ma tran PSI.
+replacing V with a PSI matrix.
 """
 
 import numpy as np
@@ -22,7 +22,7 @@ DEFAULT_EPS = 1e-6
 
 
 def _flatten_special_codes(special_codes):
-    """Trich cac special code dang so tu list/set/dict/scalar."""
+    """Extract numeric special codes from a list/set/dict/scalar."""
     if special_codes is None:
         return np.array([], dtype=float)
 
@@ -43,18 +43,18 @@ def _flatten_special_codes(special_codes):
         try:
             out.append(float(v))
         except (TypeError, ValueError):
-            # bo qua special code khong phai so (numerical binning)
+            # skip non-numeric special codes (numerical binning only)
             pass
     return np.asarray(out, dtype=float)
 
 
 def compute_prebin_counts(x_valid, splits, special_codes=None):
-    """Dem so record cua tap valid roi vao tung pre-bin theo dung ``splits``.
+    """Count validation-set records falling into each pre-bin, using ``splits``.
 
-    Tra ve mang int64 do dai ``len(splits) + 1``, khop voi mang
-    ``n_nonevent``/``n_event`` (binary) hoac ``n_records`` (continuous) ma
-    solver nhan. Loai bo missing (NaN) va special codes de khop voi tap
-    "clean" ma pre-binning dung.
+    Returns an int64 array of length ``len(splits) + 1``, aligned with the
+    ``n_nonevent``/``n_event`` (binary) or ``n_records`` (continuous) arrays the
+    solver receives. Missing (NaN) and special codes are removed so the counts
+    match the "clean" set used by pre-binning.
     """
     xv = np.asarray(x_valid, dtype=float).ravel()
 
@@ -65,8 +65,8 @@ def compute_prebin_counts(x_valid, splits, special_codes=None):
     xv = xv[mask]
 
     if xv.size == 0:
-        raise ValueError("x_valid khong con record hop le sau khi loai "
-                         "missing/special; khong the tinh PSI.")
+        raise ValueError("x_valid has no valid records left after removing "
+                         "missing/special values; cannot compute PSI.")
 
     splits = np.asarray(splits, dtype=float)
     n_bins = len(splits) + 1
@@ -76,21 +76,22 @@ def compute_prebin_counts(x_valid, splits, special_codes=None):
 
 
 def _psi_segment_matrix(n_fit, n_valid, M=DEFAULT_M, eps=DEFAULT_EPS):
-    """Ma tran PSI[(i, j)] = round(dong gop PSI cua bin [j..i] * M), j <= i."""
+    """Matrix PSI[(i, j)] = round(PSI contribution of bin [j..i] * M), j <= i."""
     n_fit = np.asarray(n_fit, dtype=np.float64)
     n_valid = np.asarray(n_valid, dtype=np.float64)
     n = len(n_fit)
 
     if len(n_valid) != n:
-        raise ValueError("n_fit va n_valid phai cung do dai; got {} vs {}."
-                         .format(n, len(n_valid)))
+        raise ValueError("n_fit and n_valid must have the same length; got {} "
+                         "vs {}.".format(n, len(n_valid)))
 
     total_fit = n_fit.sum()
     total_valid = n_valid.sum()
     if total_fit <= 0 or total_valid <= 0:
-        raise ValueError("Tong record fit/valid phai duong de tinh PSI.")
+        raise ValueError("Total fit/valid records must be positive to compute "
+                         "PSI.")
 
-    # prefix sums de tong dai [j..i] tinh trong O(1)
+    # prefix sums so a segment [j..i] total is computed in O(1)
     cum_fit = np.concatenate([[0.0], np.cumsum(n_fit)])
     cum_valid = np.concatenate([[0.0], np.cumsum(n_valid)])
 
@@ -107,20 +108,20 @@ def _psi_segment_matrix(n_fit, n_valid, M=DEFAULT_M, eps=DEFAULT_EPS):
 
 def add_psi_constraint_cp(model, n, x, n_fit, n_valid, psi_threshold,
                           M=DEFAULT_M, eps=DEFAULT_EPS):
-    """Them rang buoc ``PSI(fit, valid) <= psi_threshold`` vao model CP-SAT.
+    """Add the constraint ``PSI(fit, valid) <= psi_threshold`` to a CP-SAT model.
 
     Parameters
     ----------
     model : ortools.sat.python.cp_model.CpModel
-        Model da duoc ``BinningCP.build_model`` khoi tao (``self._model``).
+        Model already initialized by ``BinningCP.build_model`` (``self._model``).
     n : int
-        So pre-bin (``self._n``).
+        Number of pre-bins (``self._n``).
     x : dict
-        Bien quyet dinh ``x[i, j]`` (``self._x``).
+        Decision variables ``x[i, j]`` (``self._x``).
     n_fit, n_valid : array-like, shape = (n,)
-        So record moi pre-bin cua tap fit va tap valid.
+        Per-pre-bin record counts of the fit and validation sets.
     psi_threshold : float
-        Nguong PSI toi da.
+        Maximum allowed PSI.
     """
     psi = _psi_segment_matrix(n_fit, n_valid, M=M, eps=eps)
 

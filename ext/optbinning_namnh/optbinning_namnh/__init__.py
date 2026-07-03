@@ -1,8 +1,9 @@
-"""optbinning_namnh: phan mo rong optbinning voi rang buoc PSI.
+"""optbinning_namnh: optbinning extension with a PSI constraint.
 
-Cung cap cac estimator ke thua tu optbinning, them rang buoc PSI (Population
-Stability Index) giua tap fit va tap valid vao bai toan toi uu binning. Neu
-khong truyen psi_threshold/x_valid thi hanh vi giong het optbinning goc.
+Provides estimators that inherit from optbinning and add a PSI (Population
+Stability Index) constraint between the fit and validation sets to the binning
+optimization problem. If psi_threshold/x_valid are not provided, the behaviour
+is identical to the base optbinning estimators.
 """
 
 from ._psi import add_psi_constraint_cp

@@ -1,8 +1,9 @@
-"""Factory tao solver con: chi them rang buoc PSI sau ``super().build_model``.
+"""Factories for solver subclasses that only add the PSI constraint after
+``super().build_model``.
 
-Khong import truc tiep ``BinningCP``/``ContinuousBinningCP`` o day; ``base_cls``
-duoc truyen tu ben ngoai (lay tu module goc ngay luc chay) de luon bam dung
-class ma phien ban optbinning hien tai dang dung.
+``BinningCP``/``ContinuousBinningCP`` are not imported directly here; ``base_cls``
+is passed in from the outside (read from the original module at call time) so we
+always bind to whatever class the current optbinning version actually uses.
 """
 
 import numpy as np
@@ -11,9 +12,9 @@ from ._psi import add_psi_constraint_cp
 
 
 def make_psi_binning_cp(base_cls, n_valid, psi_threshold):
-    """Subclass cua BinningCP (binary target) them rang buoc PSI.
+    """Subclass of BinningCP (binary target) that adds the PSI constraint.
 
-    Fit counts moi pre-bin = n_nonevent + n_event.
+    Per-pre-bin fit counts = n_nonevent + n_event.
     """
 
     class _PSIBinningCP(base_cls):
@@ -27,9 +28,10 @@ def make_psi_binning_cp(base_cls, n_valid, psi_threshold):
 
 
 def make_psi_continuous_binning_cp(base_cls, n_valid, psi_threshold):
-    """Subclass cua ContinuousBinningCP (continuous target) them rang buoc PSI.
+    """Subclass of ContinuousBinningCP (continuous target) that adds the PSI
+    constraint.
 
-    Fit counts moi pre-bin = n_records.
+    Per-pre-bin fit counts = n_records.
     """
 
     class _PSIContinuousBinningCP(base_cls):

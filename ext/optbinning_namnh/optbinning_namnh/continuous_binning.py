@@ -1,7 +1,7 @@
-"""PSIContinuousOptimalBinning = ContinuousOptimalBinning + rang buoc PSI.
+"""PSIContinuousOptimalBinning = ContinuousOptimalBinning + a PSI constraint.
 
-Cung nguyen tac voi ``PSIOptimalBinning`` (xem binning.py). ContinuousOptimalBinning
-luon dung solver 'cp' nen khong can kiem tra solver.
+Same principle as ``PSIOptimalBinning`` (see binning.py). ContinuousOptimalBinning
+always uses the 'cp' solver, so no solver check is needed.
 """
 
 import optbinning.binning.continuous_binning as _cont_mod
@@ -19,14 +19,14 @@ class PSIContinuousOptimalBinning(ContinuousOptimalBinning):
 
     @classmethod
     def _get_param_names(cls):
-        # Xem giai thich trong PSIOptimalBinning._get_param_names.
+        # See the explanation in PSIOptimalBinning._get_param_names.
         return ContinuousOptimalBinning._get_param_names()
 
     def _validate_psi_inputs(self, x_valid):
         if (self.psi_threshold is None) != (x_valid is None):
             raise ValueError(
-                "psi_threshold va x_valid phai cung None hoac cung duoc cung "
-                "cap. psi_threshold={}, x_valid is None: {}."
+                "psi_threshold and x_valid must both be None or both be "
+                "provided. psi_threshold={}, x_valid is None: {}."
                 .format(self.psi_threshold, x_valid is None))
 
         if self.psi_threshold is None:
@@ -35,25 +35,25 @@ class PSIContinuousOptimalBinning(ContinuousOptimalBinning):
         if (not isinstance(self.psi_threshold, (int, float)) or
                 isinstance(self.psi_threshold, bool) or
                 self.psi_threshold <= 0):
-            raise ValueError("psi_threshold phai la so duong; got {}."
+            raise ValueError("psi_threshold must be a positive number; got {}."
                              .format(self.psi_threshold))
 
         if self.dtype != "numerical":
             raise ValueError(
-                "Rang buoc PSI hien chi ho tro dtype='numerical'.")
+                "The PSI constraint currently supports dtype='numerical' only.")
 
     def fit(self, x, y, sample_weight=None, check_input=False, x_valid=None):
-        """Fit continuous optimal binning co rang buoc PSI.
+        """Fit continuous optimal binning with a PSI constraint.
 
         Parameters
         ----------
         x, y : array-like, shape = (n_samples,)
-            Vector huan luyen va target continuous.
+            Training vector and continuous target.
         sample_weight : array-like, optional
         check_input : bool (default=False)
         x_valid : array-like, optional (default=None)
-            Tap valid dung de tinh PSI. Bat buoc cung/khong-cung ton tai voi
-            ``psi_threshold``.
+            Validation set used to compute PSI. Must be provided/absent together
+            with ``psi_threshold``.
         """
         self._validate_psi_inputs(x_valid)
         self._x_valid = x_valid

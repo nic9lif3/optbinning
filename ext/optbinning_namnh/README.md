@@ -1,32 +1,33 @@
 # optbinning_namnh
 
-Phần mở rộng của [optbinning](https://github.com/guillermo-navas-palencia/optbinning):
-thêm **ràng buộc PSI** (Population Stability Index) giữa tập fit và tập valid vào
-bài toán tối ưu binning.
+An extension of [optbinning](https://github.com/guillermo-navas-palencia/optbinning):
+it adds a **PSI constraint** (Population Stability Index) between the fit set and
+a validation set to the binning optimization problem.
 
-Ràng buộc: khi solver chọn các bin tối ưu (maximize IV), **PSI của các bin giữa
-tập fit và tập `x_valid` phải ≤ `psi_threshold`**. PSI ở đây = Jeffrey divergence,
-đúng quy ước của `optbinning.scorecard.monitoring`.
+The constraint: when the solver picks the optimal bins (maximizing IV), the
+**PSI of the bins between the fit set and `x_valid` must be ≤ `psi_threshold`**.
+PSI here is the Jeffrey divergence, following the convention of
+`optbinning.scorecard.monitoring`.
 
-## Cài đặt
+## Installation
 
 ```bash
 pip install ./ext/optbinning_namnh
-# hoặc build wheel:
+# or build a wheel:
 pip install build && python -m build ./ext/optbinning_namnh
 ```
 
-## Dùng
+## Usage
 
 ```python
 from optbinning_namnh import PSIOptimalBinning, PSIContinuousOptimalBinning
 
-# Binary target — y hệt OptimalBinning, thêm psi_threshold + x_valid
+# Binary target — same as OptimalBinning, plus psi_threshold + x_valid
 ob = PSIOptimalBinning(solver="cp", psi_threshold=0.05)
 ob.fit(x_train, y_train, x_valid=x_oot)
 ob.binning_table.build()
 
-# Không truyền psi_threshold => hành vi giống hệt OptimalBinning gốc
+# Without psi_threshold => identical behaviour to the base OptimalBinning
 ob0 = PSIOptimalBinning(solver="cp")
 ob0.fit(x_train, y_train)
 
@@ -35,36 +36,39 @@ cb = PSIContinuousOptimalBinning(psi_threshold=0.05)
 cb.fit(x_train, y_train, x_valid=x_oot)
 ```
 
-Quy tắc: `psi_threshold` và `x_valid` phải **cùng None** hoặc **cùng được cung cấp**.
+Rule: `psi_threshold` and `x_valid` must be **both None** or **both provided**.
 
-## Cơ chế (không sửa source gốc)
+## How it works (no changes to the original source)
 
-- **PSI tuyến tính hóa chính xác**: mỗi bin cuối là một dải pre-bin liên tiếp
-  `[j..i]` nên đóng góp PSI của nó là hằng số tính trước. Tổng PSI được biểu diễn
-  bằng đúng thủ thuật telescoping mà optbinning dùng cho hàm mục tiêu
-  (`optbinning/binning/cp.py` dòng 80-82), thành một ràng buộc **tuyến tính** trong
-  mô hình CP-SAT.
-- **Solver layer**: subclass `BinningCP`/`ContinuousBinningCP`, override
-  `build_model` = `super().build_model(...)` + thêm ràng buộc PSI.
-- **Estimator layer**: subclass `OptimalBinning`/`ContinuousOptimalBinning`. Để
-  **không copy** 145 dòng `_fit_optimizer`, ta tạm hoán tên `BinningCP` trong
-  module gốc bằng subclass PSI rồi gọi lại `super()._fit_optimizer(...)`.
+- **Exact PSI linearization**: each final bin is a contiguous run of pre-bins
+  `[j..i]`, so its PSI contribution is a precomputable constant. The total PSI is
+  expressed via the same telescoping trick optbinning uses for its objective
+  (`optbinning/binning/cp.py`, lines 80-82), yielding a **linear** constraint in
+  the CP-SAT model.
+- **Solver layer**: subclass `BinningCP`/`ContinuousBinningCP`, overriding
+  `build_model` = `super().build_model(...)` + adding the PSI constraint.
+- **Estimator layer**: subclass `OptimalBinning`/`ContinuousOptimalBinning`. To
+  **avoid copying** the ~145 lines of `_fit_optimizer`, we temporarily rebind the
+  module-global name `BinningCP` to the PSI subclass and then call
+  `super()._fit_optimizer(...)`.
 
-## Giới hạn / Lưu ý (v1)
+## Limitations / notes (v1)
 
-- Chỉ hỗ trợ `dtype="numerical"` và `solver="cp"` (continuous vốn luôn `cp`).
-- **Ghim phiên bản optbinning** (`>=0.21,<0.22`): package phụ thuộc vào API nội
-  bộ (`_fit_optimizer`, tên `BinningCP`, chữ ký `build_model`). Khi nâng optbinning,
-  chạy lại test.
-- **Không thread-safe**: cơ chế hoán tên module toàn cục không an toàn khi chạy
-  nhiều fit song song trong cùng tiến trình (vd trong `BinningProcess` đa luồng).
-  Dùng cho binning từng biến độc lập.
-- **`clone()`**: `psi_threshold` không được `sklearn.clone()` giữ lại (nằm ngoài
-  `get_params`); đặt lại sau khi clone nếu dùng trong Pipeline/GridSearch.
-- **Vô nghiệm**: PSI là ràng buộc cứng. Nếu `psi_threshold` quá chặt, solver có
-  thể trả về fallback 1 bin (status không OPTIMAL). Nới `psi_threshold` khi đó.
+- Supports `dtype="numerical"` and `solver="cp"` only (continuous is always `cp`).
+- **Pin the optbinning version** (`>=0.21,<0.22`): the package depends on internal
+  APIs (`_fit_optimizer`, the `BinningCP` name, the `build_model` signature). When
+  upgrading optbinning, re-run the tests.
+- **Not thread-safe**: the module-global name rebinding is unsafe when running
+  multiple fits in parallel within the same process (e.g. inside a multithreaded
+  `BinningProcess`). Use it for independent per-variable binning.
+- **`clone()`**: `psi_threshold` is not preserved by `sklearn.clone()` (it is
+  outside `get_params`); set it again after cloning if used in a
+  Pipeline/GridSearch.
+- **Infeasibility**: PSI is a hard constraint. If `psi_threshold` is too tight the
+  solver may fall back to a single bin (non-OPTIMAL status). Loosen
+  `psi_threshold` in that case.
 
-## Test
+## Tests
 
 ```bash
 pip install -e ".[test]"

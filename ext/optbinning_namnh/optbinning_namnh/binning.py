@@ -1,15 +1,17 @@
-"""PSIOptimalBinning = OptimalBinning + rang buoc PSI giua tap fit va tap valid.
+"""PSIOptimalBinning = OptimalBinning + a PSI constraint between fit and valid.
 
-Ke thua toan bo ``optbinning.OptimalBinning`` va KHONG sua source goc. Thay doi:
-  - ``__init__``: them ``psi_threshold`` (mac dinh None).
-  - ``fit``: them ``x_valid`` (mac dinh None) de kiem tra rang buoc PSI khi
-    solver lua chon kich ban bin toi uu.
+Inherits the whole ``optbinning.OptimalBinning`` and does NOT modify its source.
+Changes:
+  - ``__init__``: adds ``psi_threshold`` (default None).
+  - ``fit``: adds ``x_valid`` (default None) used to enforce the PSI constraint
+    while the solver picks the optimal binning scenario.
 
-Neu ``psi_threshold is None`` -> hanh vi giong het ``OptimalBinning`` goc.
+If ``psi_threshold is None`` the behaviour is identical to the base
+``OptimalBinning``.
 
-Ky thuat: khong copy ``_fit_optimizer`` (145 dong logic monotonic/bin-size cua
-tac gia). Thay vao do, tam hoan doi ten ``BinningCP`` trong module goc bang mot
-subclass co them rang buoc PSI, roi goi lai ``super()._fit_optimizer(...)``.
+Technique: we do NOT copy the ~145 lines of ``_fit_optimizer`` (the author's
+monotonic/bin-size logic). Instead we temporarily rebind the module-global name
+``BinningCP`` to a PSI subclass, then call ``super()._fit_optimizer(...)``.
 """
 
 import optbinning.binning.binning as _binning_mod
@@ -27,20 +29,21 @@ class PSIOptimalBinning(OptimalBinning):
 
     @classmethod
     def _get_param_names(cls):
-        # Dung nguyen danh sach param cua lop cha:
-        #   - Tu dong cap nhat neu upstream them param moi (forward-compat,
-        #     khong phai liet ke lai ~35 tham so).
-        #   - CO Y bo 'psi_threshold' de _fit goi _check_parameters(
-        #     **self.get_params()) khong bi vo (ham do khong nhan param nay).
-        # Danh doi: sklearn clone() se khong giu psi_threshold (dat lai sau
-        # khi clone neu can dung trong Pipeline/GridSearch...).
+        # Reuse the parent's parameter list:
+        #   - auto-updates if upstream adds a new parameter (forward-compat, no
+        #     need to re-list the ~35 parameters).
+        #   - deliberately excludes 'psi_threshold' so that _fit's call
+        #     _check_parameters(**self.get_params()) does not break (that
+        #     function does not accept this parameter).
+        # Trade-off: sklearn clone() will not preserve psi_threshold (set it
+        # again after cloning if used inside a Pipeline/GridSearch...).
         return OptimalBinning._get_param_names()
 
     def _validate_psi_inputs(self, x_valid):
         if (self.psi_threshold is None) != (x_valid is None):
             raise ValueError(
-                "psi_threshold va x_valid phai cung None hoac cung duoc cung "
-                "cap. psi_threshold={}, x_valid is None: {}."
+                "psi_threshold and x_valid must both be None or both be "
+                "provided. psi_threshold={}, x_valid is None: {}."
                 .format(self.psi_threshold, x_valid is None))
 
         if self.psi_threshold is None:
@@ -49,30 +52,30 @@ class PSIOptimalBinning(OptimalBinning):
         if (not isinstance(self.psi_threshold, (int, float)) or
                 isinstance(self.psi_threshold, bool) or
                 self.psi_threshold <= 0):
-            raise ValueError("psi_threshold phai la so duong; got {}."
+            raise ValueError("psi_threshold must be a positive number; got {}."
                              .format(self.psi_threshold))
 
         if self.dtype != "numerical":
             raise ValueError(
-                "Rang buoc PSI hien chi ho tro dtype='numerical'.")
+                "The PSI constraint currently supports dtype='numerical' only.")
 
         if self.solver != "cp":
             raise ValueError(
-                "Rang buoc PSI hien chi ho tro solver='cp'; got '{}'."
-                .format(self.solver))
+                "The PSI constraint currently supports solver='cp' only; got "
+                "'{}'.".format(self.solver))
 
     def fit(self, x, y, sample_weight=None, check_input=False, x_valid=None):
-        """Fit optimal binning co rang buoc PSI.
+        """Fit optimal binning with a PSI constraint.
 
         Parameters
         ----------
         x, y : array-like, shape = (n_samples,)
-            Vector huan luyen va target nhi phan.
+            Training vector and binary target.
         sample_weight : array-like, optional
         check_input : bool (default=False)
         x_valid : array-like, optional (default=None)
-            Tap valid dung de tinh PSI. Bat buoc cung/khong-cung ton tai voi
-            ``psi_threshold``.
+            Validation set used to compute PSI. Must be provided/absent together
+            with ``psi_threshold``.
         """
         self._validate_psi_inputs(x_valid)
         self._x_valid = x_valid
@@ -86,7 +89,7 @@ class PSIOptimalBinning(OptimalBinning):
             check_input)
 
     def _fit_optimizer(self, splits, n_nonevent, n_event):
-        # Khong co PSI, hoac solver khong chay (<=1 pre-bin) -> y het lop cha.
+        # No PSI, or the solver is not run (<=1 pre-bin) -> behave like base.
         if (self.psi_threshold is None or self._x_valid is None or
                 len(n_nonevent) <= 1):
             return super()._fit_optimizer(splits, n_nonevent, n_event)
