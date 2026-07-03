@@ -18,7 +18,9 @@ replacing V with a PSI matrix.
 import numpy as np
 
 DEFAULT_M = int(1e6)
-DEFAULT_EPS = 1e-6
+# Empty/near-empty bins: their proportion is floored at this value so PSI stays
+# finite (avoids ln of 0). 1e-3 means an empty bin is treated as 0.1% mass.
+DEFAULT_EPS = 1e-3
 
 
 def _flatten_special_codes(special_codes):
@@ -100,6 +102,7 @@ def _psi_segment_matrix(n_fit, n_valid, M=DEFAULT_M, eps=DEFAULT_EPS):
         for j in range(i + 1):
             a = (cum_fit[i + 1] - cum_fit[j]) / total_fit
             e = (cum_valid[i + 1] - cum_valid[j]) / total_valid
+            # floor empty/near-empty proportions so ln(a/e) stays finite
             a = a if a > eps else eps
             e = e if e > eps else eps
             psi[(i, j)] = int(round((a - e) * np.log(a / e) * M))

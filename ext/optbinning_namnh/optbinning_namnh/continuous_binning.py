@@ -4,6 +4,8 @@ Same principle as ``PSIOptimalBinning`` (see binning.py). ContinuousOptimalBinni
 always uses the 'cp' solver, so no solver check is needed.
 """
 
+import numpy as np
+
 import optbinning.binning.continuous_binning as _cont_mod
 from optbinning import ContinuousOptimalBinning
 
@@ -41,6 +43,11 @@ class PSIContinuousOptimalBinning(ContinuousOptimalBinning):
         if self.dtype != "numerical":
             raise ValueError(
                 "The PSI constraint currently supports dtype='numerical' only.")
+
+        xv = np.asarray(x_valid, dtype=float).ravel()
+        if xv.size == 0 or np.all(np.isnan(xv)):
+            raise ValueError(
+                "x_valid is empty or all-missing; cannot compute PSI.")
 
     def fit(self, x, y, sample_weight=None, check_input=False, x_valid=None):
         """Fit continuous optimal binning with a PSI constraint.

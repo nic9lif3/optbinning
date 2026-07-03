@@ -14,6 +14,8 @@ monotonic/bin-size logic). Instead we temporarily rebind the module-global name
 ``BinningCP`` to a PSI subclass, then call ``super()._fit_optimizer(...)``.
 """
 
+import numpy as np
+
 import optbinning.binning.binning as _binning_mod
 from optbinning import OptimalBinning
 
@@ -63,6 +65,11 @@ class PSIOptimalBinning(OptimalBinning):
             raise ValueError(
                 "The PSI constraint currently supports solver='cp' only; got "
                 "'{}'.".format(self.solver))
+
+        xv = np.asarray(x_valid, dtype=float).ravel()
+        if xv.size == 0 or np.all(np.isnan(xv)):
+            raise ValueError(
+                "x_valid is empty or all-missing; cannot compute PSI.")
 
     def fit(self, x, y, sample_weight=None, check_input=False, x_valid=None):
         """Fit optimal binning with a PSI constraint.
